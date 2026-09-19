@@ -1,0 +1,433 @@
+{
+  "info": {
+    "name": "InsuredMine Assessment - Recruiter Tests",
+    "description": "Run the API locally with npm start and your own MongoDB connection. Run requests in order. For both import requests, select samples/policies.csv in Body > form-data > file if Postman cannot resolve the relative path. The message request automatically schedules 60 seconds ahead in India time. A 202 response confirms scheduling only; verify the final message in MongoDB as described in README.md. No authentication is configured for this assessment.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "noauth"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:5000",
+      "type": "string"
+    },
+    {
+      "key": "scheduleId",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "01 - Health",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/api/health",
+        "description": "Expected: HTTP 200 and status Up."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "const body = pm.response.json();",
+              "pm.test('API is running', () => pm.expect(body.status).to.equal('Up'));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 - Import sample policies",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": "{{baseUrl}}/api/import",
+        "description": "Select samples/policies.csv for the file field. Expected: 3 rows, 2 users, 3 policies. Let Postman set the multipart Content-Type automatically.",
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "file",
+              "type": "file",
+              "src": "samples/policies.csv"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "const body = pm.response.json();",
+              "pm.test('All sample records processed', () => {",
+              "  pm.expect(body.success).to.equal(true);",
+              "  pm.expect(body.data.data.imported.rows).to.equal(3);",
+              "  pm.expect(body.data.data.imported.users).to.equal(2);",
+              "  pm.expect(body.data.data.imported.policies).to.equal(3);",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 - Repeat the same import",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": "{{baseUrl}}/api/import",
+        "description": "Select the same sample file again. Expected: zero database writes because the imported data is unchanged.",
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "file",
+              "type": "file",
+              "src": "samples/policies.csv"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "const body = pm.response.json();",
+              "pm.test('All sample records processed', () => {",
+              "  pm.expect(body.success).to.equal(true);",
+              "  pm.expect(body.data.data.imported.rows).to.equal(3);",
+              "  pm.expect(body.data.data.imported.users).to.equal(2);",
+              "  pm.expect(body.data.data.imported.policies).to.equal(3);",
+              "});",
+              "pm.test('Unchanged records are skipped', () => pm.expect(Object.values(body.data.data.databaseWrites).every(value => value === 0)).to.equal(true));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "04 - Search by username",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/api/policies/search?username=Alex%20Reviewer",
+        "description": "Run the sample import first. Expected: two matching policies."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "const body = pm.response.json();",
+              "pm.test('Alex Reviewer has two policies', () => {",
+              "  pm.expect(body.success).to.equal(true);",
+              "  pm.expect(body.count).to.equal(2);",
+              "  pm.expect(body.data.every(row => row.user.firstName === 'Alex Reviewer')).to.equal(true);",
+              "  pm.expect(body.data.map(row => row.policy.policyNumber).sort()).to.eql(['REVIEW-001', 'REVIEW-002']);",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "05 - Search with quotes and spaces",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/api/policies/search?username=%22Alex%20Reviewer%20%22",
+        "description": "Surrounding quotes and whitespace are accepted."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "const body = pm.response.json();",
+              "pm.test('Alex Reviewer has two policies', () => {",
+              "  pm.expect(body.success).to.equal(true);",
+              "  pm.expect(body.count).to.equal(2);",
+              "  pm.expect(body.data.every(row => row.user.firstName === 'Alex Reviewer')).to.equal(true);",
+              "  pm.expect(body.data.map(row => row.policy.policyNumber).sort()).to.eql(['REVIEW-001', 'REVIEW-002']);",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "06 - Case-insensitive partial search",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/api/policies/search?username=alex",
+        "description": "Partial names are supported."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "const body = pm.response.json();",
+              "pm.test('Alex Reviewer has two policies', () => {",
+              "  pm.expect(body.success).to.equal(true);",
+              "  pm.expect(body.count).to.equal(2);",
+              "  pm.expect(body.data.every(row => row.user.firstName === 'Alex Reviewer')).to.equal(true);",
+              "  pm.expect(body.data.map(row => row.policy.policyNumber).sort()).to.eql(['REVIEW-001', 'REVIEW-002']);",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "07 - Policies grouped by user",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/api/policies/users",
+        "description": "Expected: Alex Reviewer has 2 policies and Casey Tester has 1. Other data in the database can also appear."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "const body = pm.response.json();",
+              "pm.test('Sample policies are grouped correctly', () => {",
+              "  const alex = body.data.find(user => user.email === 'alex.reviewer@example.test');",
+              "  const casey = body.data.find(user => user.email === 'casey.tester@example.test');",
+              "  pm.expect(alex.policyCount).to.equal(2);",
+              "  pm.expect(casey.policyCount).to.equal(1);",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "08 - Current CPU metrics",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/api/metrics/cpu",
+        "description": "Wait at least one second after server startup. Expected: a PID, CPU reading and threshold of 70 with the default settings. Use npm run test:cpu to demonstrate an actual CPU-triggered restart."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "const body = pm.response.json();",
+              "pm.test('CPU monitor is reporting', () => {",
+              "  pm.expect(body.data).to.be.an('object');",
+              "  pm.expect(body.data.pid).to.be.a('number');",
+              "  pm.expect(body.data.cpuPercentage).to.be.a('number');",
+              "  pm.expect(body.data.thresholdPercentage).to.equal(70);",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "09 - Schedule a message 60 seconds ahead",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/api/messages",
+        "description": "The pre-request script computes a future date/time in India time. Expected: HTTP 202 with pending status. The scheduleId is saved as a collection variable. Verify the messages collection after the returned scheduledAt; see README.md.",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"message\": \"Recruiter assessment reminder\",\n  \"day\": \"{{scheduledDay}}\",\n  \"time\": \"{{scheduledTime}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const due = new Date(Date.now() + 60000);",
+              "due.setUTCMilliseconds(0);",
+              "const ist = new Date(due.getTime() + 330 * 60000).toISOString();",
+              "pm.variables.set('scheduledDay', ist.slice(0, 10));",
+              "pm.variables.set('scheduledTime', ist.slice(11, 19));",
+              "pm.variables.set('expectedScheduledAt', due.toISOString());"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 202', () => pm.response.to.have.status(202));",
+              "const body = pm.response.json();",
+              "pm.test('Schedule accepted with the correct time zone', () => {",
+              "  pm.expect(body.data.status).to.equal('pending');",
+              "  pm.expect(body.data.timezone).to.equal('Asia/Kolkata');",
+              "  pm.expect(body.data.scheduledAt).to.equal(pm.variables.get('expectedScheduledAt'));",
+              "});",
+              "pm.collectionVariables.set('scheduleId', body.data.scheduleId);",
+              "console.log('MongoDB schedule/message _id:', body.data.scheduleId);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "10 - Invalid input checks",
+      "item": [
+        {
+          "name": "Missing username",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/policies/search",
+            "description": "Expected HTTP 400."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 400', () => pm.response.to.have.status(400));",
+                  "const body = pm.response.json();",
+                  "pm.test('Validation error is returned', () => pm.expect(body.success).to.equal(false));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Missing uploaded file",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{baseUrl}}/api/import",
+            "description": "Expected HTTP 400."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 400', () => pm.response.to.have.status(400));",
+                  "const body = pm.response.json();",
+                  "pm.test('Validation error is returned', () => pm.expect(body.success).to.equal(false));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Schedule in the past",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/messages",
+            "description": "Expected HTTP 400 and no schedule saved.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"message\": \"Past date must fail\",\n  \"day\": \"2000-01-01\",\n  \"time\": \"12:00\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 400', () => pm.response.to.have.status(400));",
+                  "const body = pm.response.json();",
+                  "pm.test('Validation error is returned', () => pm.expect(body.success).to.equal(false));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Invalid calendar date",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/messages",
+            "description": "Expected HTTP 400; February 30 is invalid.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"message\": \"Invalid date must fail\",\n  \"day\": \"2099-02-30\",\n  \"time\": \"12:00\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 400', () => pm.response.to.have.status(400));",
+                  "const body = pm.response.json();",
+                  "pm.test('Validation error is returned', () => pm.expect(body.success).to.equal(false));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
